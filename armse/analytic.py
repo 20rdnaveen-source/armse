@@ -1,5 +1,5 @@
 """Closed-form memory-cost estimator (the scheduler's cost function).
-
+ 
 Assumptions (all exposed, all validated against the event simulator in tests/ and bench):
   * traffic is exact: the loop-nest reuse rule is expressed through two 'traversal' counts
   * DMA and compute durations are exact sums over tile-size classes
@@ -9,8 +9,8 @@ Assumptions (all exposed, all validated against the event simulator in tests/ an
 from .config import HwConfig, Workload, cdiv
 from .schedule import Schedule
 from .sim import conflict_factor
-
-
+ 
+ 
 def classes(D: int, t: int):
     f, r = divmod(D, t)
     out = []
@@ -19,8 +19,8 @@ def classes(D: int, t: int):
     if r:
         out.append((r, 1))
     return out
-
-
+ 
+ 
 def estimate(wl: Workload, hw: HwConfig, sch: Schedule) -> dict:
     M, N, K = wl.M, wl.N, wl.K
     if min(M, N, K) == 0:
@@ -38,7 +38,8 @@ def estimate(wl: Workload, hw: HwConfig, sch: Schedule) -> dict:
     kcl, ncl = classes(K, tk), classes(N, tn)
     SA = sum(c * cdiv(s, bus) for s, c in kcl)
     SB = sum(c * cdiv(s, bus) for s, c in ncl)
-    SW = sum(c * cdiv(4 * s, bus) for s, c in ncl)
+    ob = wl.out_bytes
+    SW = sum(c * cdiv(ob * s, bus) for s, c in ncl)
     G = sum(c * cdiv(s, L) for s, c in kcl)
     durA = nm * nk * jo + rf * M * nk + M * SA                 # one traversal of all A tiles
     durB = nk * nn * jo + rf * K * nn + K * SB                 # one traversal of all B tiles
@@ -50,14 +51,15 @@ def estimate(wl: Workload, hw: HwConfig, sch: Schedule) -> dict:
     r0, c0 = min(tm, M), min(tk, K)
     first_ld = (jo + r0 * (rf + cdiv(c0, bus))) + (jo + c0 * (rf + cdiv(min(tn, N), bus)))
     lm, ln = M - (nm - 1) * tm, N - (nn - 1) * tn
-    last_wb = jo + lm * (rf + cdiv(4 * ln, bus))
+    last_wb = jo + lm * (rf + cdiv(ob * ln, bus))
     if sch.nbuf_in == 1:
         cyc = hw.start_off + (t_dma - durW) + t_cmp + (durW if sch.nbuf_out == 1 else last_wb)
     else:
         tc = t_cmp + ((durW - last_wb) if sch.nbuf_out == 1 else 0)
         steady = max(t_dma - first_ld - last_wb, tc)
         cyc = hw.start_off + first_ld + steady + last_wb
-    return dict(bytes_rd=tA * M * K + tB * K * N, bytes_wr=4 * M * N,
+    return dict(bytes_rd=tA * M * K + tB * K * N, bytes_wr=ob * M * N,
                 transfers=tA * nm * nk + tB * nk * nn + nm * nn,
                 t_dma=t_dma, t_cmp=t_cmp, cycles=int(cyc),
                 dur_A=durA, dur_B=durB, dur_WB=durW, tA=tA, tB=tB)
+ 

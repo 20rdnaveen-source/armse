@@ -1,5 +1,5 @@
 """Event-driven executor for ARMSE programs.
-
+ 
 Semantics (mirrors rtl/, see docs/ARCHITECTURE.md section 6):
   * one in-order DMA engine and one in-order compute engine
   * a job starts at the first cycle where its dependency counter is visible and the engine is free
@@ -17,31 +17,29 @@ from typing import Optional
 import numpy as np
 from .config import (HwConfig, cdiv, DeadlockError, HazardError)
 from .schedule import Program, LA, LB, WB
-
-
+ 
+ 
 def dma_beats(hw: HwConfig, op) -> int:
-    if op.kind == WB:
-        return cdiv(4 * op.cols, hw.bus_bytes)
-    return cdiv(op.cols, hw.bus_bytes)
-
-
+    return cdiv(op.cols * op.ebytes, hw.bus_bytes)
+ 
+ 
 def dma_dur(hw: HwConfig, op) -> int:
     return hw.job_ovh + op.rows * (hw.row_fix + dma_beats(hw, op))
-
-
+ 
+ 
 def conflict_factor(hw: HwConfig, tn: int) -> int:
     """Serialisation of a B-lane read for the naive (row-major [k][j]) layout: gcd(tn, banks)."""
     return gcd(tn, hw.lanes) if hw.bank_mode == "naive" else 1
-
-
+ 
+ 
 def cmp_issue(hw: HwConfig, op) -> int:
     return op.tm * op.tn * cdiv(op.tk, hw.lanes) * conflict_factor(hw, op.tn)
-
-
+ 
+ 
 def cmp_dur(hw: HwConfig, op) -> int:
-    return cmp_issue(hw, op) + hw.cmp_ovh
-
-
+    return cmp_issue(hw, op) + hw.cmp_ovh + op.extra
+ 
+ 
 @dataclass
 class SimResult:
     cycles: int
@@ -51,8 +49,8 @@ class SimResult:
     ce: list
     metrics: dict
     C: Optional[np.ndarray] = None
-
-
+ 
+ 
 def schedule_times(prog: Program):
     hw = prog.hw
     nd, nc = len(prog.dma), len(prog.cmp)
@@ -84,8 +82,8 @@ def schedule_times(prog: Program):
         if not moved:
             raise DeadlockError(f"deadlock: dma index {di}/{nd}, compute index {ci}/{nc}")
     return ds, de, cs, ce
-
-
+ 
+ 
 def check_hazards(prog: Program, ds, de, cs, ce):
     """Verify buffer ownership from timing. Raises HazardError on the first violation."""
     nxt = {}
@@ -98,6 +96,8 @@ def check_hazards(prog: Program, ds, de, cs, ce):
                 last[op.slot] = i
     for j, c in enumerate(prog.cmp):
         for idx in (c.a_dma, c.b_dma):
+            if idx < 0:
+                continue                                  # resident operand (fused mode)
             if cs[j] < de[idx]:
                 raise HazardError(f"compute {j} starts before its operand load {idx} completed")
             n = nxt.get(idx)
@@ -114,8 +114,8 @@ def check_hazards(prog: Program, ds, de, cs, ce):
         q2 = q + nb
         if q2 in first and cs[first[q2]] < de[w]:
             raise HazardError(f"tile {q2} computes into output slot before writeback of tile {q} done")
-
-
+ 
+ 
 def metrics_of(prog: Program, ds, de, cs, ce) -> dict:
     hw, wl = prog.hw, prog.wl
     nd, nc = len(prog.dma), len(prog.cmp)
@@ -130,7 +130,7 @@ def metrics_of(prog: Program, ds, de, cs, ce) -> dict:
         stall += cs[j] - prev
         prev = ce[j]
     brd = sum(op.rows * op.cols for op in prog.dma if op.kind != WB)
-    bwr = sum(4 * op.rows * op.cols for op in prog.dma if op.kind == WB)
+    bwr = sum(op.ebytes * op.rows * op.cols for op in prog.dma if op.kind == WB)
     issue = sum(cmp_issue(hw, c) for c in prog.cmp)
     ideal_issue = sum(c.tm * c.tn * cdiv(c.tk, hw.lanes) for c in prog.cmp)
     s = prog.sch
@@ -156,8 +156,8 @@ def metrics_of(prog: Program, ds, de, cs, ce) -> dict:
         program_bytes=16 * (nd + nc),
         bank_serial_cycles=issue - ideal_issue,
     )
-
-
+ 
+ 
 def functional_run(prog: Program, A: np.ndarray, B: np.ndarray, ds, de, cs, ce) -> np.ndarray:
     """Replay data movement in time order: loads land at completion, computes read at start and
     write at end, writebacks read at start.  Wrong dependencies give wrong numerical results."""
@@ -188,21 +188,29 @@ def functional_run(prog: Program, A: np.ndarray, B: np.ndarray, ds, de, cs, ce) 
                 bufB[op.slot] = B[k0:k0 + op.rows, n0:n0 + op.cols].astype(np.int32)
         elif kind == "Cs":
             c = prog.cmp[i]
-            part = bufA[c.a_slot] @ bufB[c.b_slot]
+            if c.a_dma < 0:                               # resident A operand (fused phase 2)
+                mi_, _, ki_ = c.tile
+                atile = A[mi_ * tm:mi_ * tm + c.tm, ki_ * tk:ki_ * tk + c.tk].astype(np.int32)
+            else:
+                atile = bufA[c.a_slot]
+            part = atile @ bufB[c.b_slot]
             base = None if c.first else bufO[c.o_slot].copy()
             pend[i] = (part, base)
         elif kind == "Ce":
             c = prog.cmp[i]
             part, base = pend.pop(i)
             bufO[c.o_slot] = part if base is None else base + part
+            if prog.no_wb and c.tile[2] == cdiv(wl.K, tk) - 1:   # outputs stay on chip: capture them
+                mi_, ni_, _ = c.tile
+                C[mi_ * tm:mi_ * tm + c.tm, ni_ * tn:ni_ * tn + c.tn] = bufO[c.o_slot]
         else:
             op = prog.dma[i]
             mi, ni, _ = op.tile
             m0, n0 = mi * tm, ni * tn
             C[m0:m0 + op.rows, n0:n0 + op.cols] = bufO[op.slot]
     return C
-
-
+ 
+ 
 def simulate(prog: Program, A=None, B=None, functional=False, check=True) -> SimResult:
     ds, de, cs, ce = schedule_times(prog)
     if check:
@@ -213,17 +221,18 @@ def simulate(prog: Program, A=None, B=None, functional=False, check=True) -> Sim
         if A is None or B is None:
             raise ValueError("functional simulation needs A and B")
         C = (np.zeros((prog.wl.M, prog.wl.N), dtype=np.int32)
-             if not prog.dma else functional_run(prog, A, B, ds, de, cs, ce))
+             if not prog.cmp else functional_run(prog, A, B, ds, de, cs, ce))
     return SimResult(m["cycles"], ds, de, cs, ce, m, C)
-
-
+ 
+ 
 def reference(A: np.ndarray, B: np.ndarray) -> np.ndarray:
     """Independent reference: plain int64 matmul reduced to int32 (two's-complement wrap)."""
     return (A.astype(np.int64) @ B.astype(np.int64)).astype(np.int32)
-
-
+ 
+ 
 def random_operands(wl, seed=0):
     rng = np.random.default_rng(seed)
     A = rng.integers(-128, 128, size=(wl.M, wl.K), dtype=np.int64).astype(np.int8)
     B = rng.integers(-128, 128, size=(wl.K, wl.N), dtype=np.int64).astype(np.int8)
     return A, B
+ 

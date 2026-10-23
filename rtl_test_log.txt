@@ -1,0 +1,20 @@
+ARMSE RTL test log
+Icarus Verilog version 12.0 (devel) (s20150603-1539-g2693dd32b)
+RESULT tb_skew_mem: PASS
+C:\Users\20rdn\Downloads\armse\tb\tb_skew_mem.v:53: $finish called at 1050000 (1ps)
+
+CYCLES t01_basic16 measured=1099 model=1099 delta=0 | cmp_busy=515 (model 515) dma_busy=579 (model 579) cmp_wait=260 dma_wait=516
+RESULT t01_basic16: PASS
+CYCLES t02_ragged_db measured=1189 model=1189 delta=0 | cmp_busy=465 (model 465) dma_busy=1135 (model 1135) cmp_wait=674 dma_wait=25
+RESULT t02_ragged_db: PASS
+CYCLES t03_oddtiles measured=5330 model=5330 delta=0 | cmp_busy=2524 (model 2524) dma_busy=5205 (model 5205) cmp_wait=2719 dma_wait=16
+RESULT t03_oddtiles: PASS
+CYCLES t04_gemv measured=353 model=353 delta=0 | cmp_busy=60 (model 60) dma_busy=316 (model 316) cmp_wait=275 dma_wait=31
+RESULT t04_gemv: PASS
+CYCLES t05_lanes4 measured=945 model=945 delta=0 | cmp_busy=504 (model 504) dma_busy=860 (model 860) cmp_wait=376 dma_wait=64
+RESULT t05_lanes4: PASS
+CYCLES t06_retain measured=2299 model=2299 delta=0 | cmp_busy=1179 (model 1179) dma_busy=1941 (model 1941) cmp_wait=1012 dma_wait=336
+RESULT t06_retain: PASS
+CYCLES t07_kloop_single measured=1332 model=1332 delta=0 | cmp_busy=660 (model 660) dma_busy=658 (model 658) cmp_wait=548 dma_wait=664
+RESULT t07_kloop_single: PASS
+RTL TESTS: ALL PASS

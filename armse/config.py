@@ -1,39 +1,39 @@
 """Hardware configuration, workloads and error types."""
 from dataclasses import dataclass
-
-
+ 
+ 
 class ArmseError(Exception):
     pass
-
-
+ 
+ 
 class UnsupportedOp(ArmseError):
     pass
-
-
+ 
+ 
 class ScheduleError(ArmseError):
     pass
-
-
+ 
+ 
 class NoFitError(ArmseError):
     pass
-
-
+ 
+ 
 class DeadlockError(ArmseError):
     pass
-
-
+ 
+ 
 class HazardError(ArmseError):
     pass
-
-
+ 
+ 
 def cdiv(a: int, b: int) -> int:
     return -(-a // b)
-
-
+ 
+ 
 @dataclass(frozen=True)
 class HwConfig:
     """Parameterised local-memory + transfer model (see docs/ARCHITECTURE.md).
-
+ 
     lanes        MAC lanes along K == number of banks in the A/B buffers (power of two >= 4)
     bus_bytes    external bus bytes per beat (RTL implements 4; model accepts multiples of 4)
     row_lat      cycles between a burst command and its first data beat
@@ -57,7 +57,7 @@ class HwConfig:
     bank_mode: str = "skew"
     max_dim: int = 255          # tile fields are 8 bits in the descriptor format
     max_entries: int = 1048575  # dependency counters / descriptor indices are 20 bits
-
+ 
     def __post_init__(self):
         if self.lanes < 4 or self.lanes & (self.lanes - 1):
             raise ValueError("lanes must be a power of two >= 4")
@@ -67,26 +67,26 @@ class HwConfig:
             raise ValueError("bank_mode must be 'skew' or 'naive'")
         if min(self.a_depth, self.b_depth, self.o_words) < 0:
             raise ValueError("buffer sizes must be non-negative")
-
+ 
     @property
     def row_fix(self) -> int:
         """Fixed cycles per burst row: 1 command cycle + row_lat wait."""
         return self.row_lat + 1
-
+ 
     @property
     def onchip_bytes(self) -> int:
         return self.lanes * (self.a_depth + self.b_depth) + 4 * self.o_words
-
+ 
     def scaled(self, f: float) -> "HwConfig":
         """Scale all three buffer capacities by f (rounded down, min 1 word)."""
         g = lambda v: max(1, int(v * f))
         return HwConfig(**{**self.__dict__, "a_depth": g(self.a_depth),
                            "b_depth": g(self.b_depth), "o_words": g(self.o_words)})
-
+ 
     def replace(self, **kw) -> "HwConfig":
         return HwConfig(**{**self.__dict__, **kw})
-
-
+ 
+ 
 @dataclass(frozen=True)
 class Workload:
     """One INT8 GEMM  C[MxN] (int32) = A[MxK] * B[KxN].  Conv/attention/MLP are lowered to GEMM."""
@@ -96,15 +96,17 @@ class Workload:
     K: int
     family: str = "gemm"
     op: str = "gemm"
-
+    out_bytes: int = 4          # bytes per output element written to external memory (4 = int32, 1 = requantised int8)
+ 
     @property
     def macs(self) -> int:
         return self.M * self.N * self.K
-
+ 
     @property
     def compulsory_in(self) -> int:
         return self.M * self.K + self.K * self.N
-
+ 
     @property
     def compulsory_out(self) -> int:
-        return 4 * self.M * self.N
+        return self.out_bytes * self.M * self.N
+ 

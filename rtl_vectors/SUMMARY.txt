@@ -1,0 +1,8 @@
+name cycles bytes_rd bytes_wr transfers
+t01_basic16 1099 512 1024 3
+t02_ragged_db 1189 912 572 28
+t03_oddtiles 5330 4323 1360 108
+t04_gemv 353 400 36 5
+t05_lanes4 945 616 480 20
+t06_retain 2299 1536 2304 21
+t07_kloop_single 1332 720 324 9

@@ -9,7 +9,7 @@ ARMSE is a working name; **no novelty claim is made** (see `docs/RELATED_WORK.md
 
 | Component | Status |
 |---|---|
-| Python model, scheduler, simulator, estimator, bank/energy analysis | **Executed here**: 28 unit tests pass (`make py-test`) |
+| Python model, scheduler, simulator, estimator, bank/energy analysis | **Executed here**: 34 unit tests pass (`make py-test`) |
 | Functional correctness of tiled execution | 144 (workload x policy) runs bit-exact vs an independent int64 numpy reference, 0 mismatches; plus 150 random cases in tests |
 | Schedule legality | every generated program passes deadlock + buffer-hazard checking; the checker is shown to catch deliberately broken programs |
 | Estimator | traffic/DMA-busy/compute-busy exact (600 random cases); cycles error measured (report section 3) |
@@ -24,6 +24,7 @@ the first time you run them they will either confirm or refute the RTL against t
 ```
 armse/          config, schedule (program generation), sim, analytic, scheduler, workloads, banks, energy, rtlexport, bench
 tests/          unittest suite (python3 -m unittest discover -s tests -t .)
+armse/fused.py, fusionbench.py  model-only fused GEMM chains (attention / MLP pairs) + study
 armse/rtlmodel.py cycle-level transcription of the RTL (logic/timing check without an HDL simulator)
 rtl/            armse_skew_mem, armse_obuf, armse_dma, armse_compute, armse_top, armse_fields.vh (generated)
 tb/             tb_armse (self-checking top-level), tb_skew_mem (unit)
@@ -34,7 +35,7 @@ docs/           ARCHITECTURE.md, RELATED_WORK.md
 
 ## Reproduce
 ```
-make py-test                 # 28 tests
+make py-test                 # 34 tests
 python3 -m armse.bench       # ~100 s, regenerates results/ (deterministic)
 make vectors                 # regenerates rtl/armse_fields.vh and rtl_vectors/
 make rtl-model-test          # cycle-level transcription of the RTL (no HDL tool needed)
@@ -73,6 +74,19 @@ What the data does and does not say (all in the model, one hardware configuratio
 * **Cost:** same on-chip data memory for all policies. Unrolled descriptor programs cost memory (mean 11 KB for D, 1.2 MB mean for the direct baseline) and host scheduling is 0.26 s mean in Python. Hardware LUT/FF/DSP cost is unknown (no synthesis).
 
 Caveats that bound these conclusions: single hardware configuration for the headline table; im2col conv without window reuse; D_feedback and C_best_square use simulator-in-the-loop information that a deployed system would obtain by profiling; the cycle model's constants are hand-derived from RTL that has not been simulated; no fusion, no sparsity, no measured power.
+
+## Fused GEMM chains (model only, no RTL) - `results/FUSION_REPORT.md`
+Row-block fusion keeps the requantised INT8 intermediate (tm x N1) in the A buffer so it never goes to external memory
+(attention QK^T->PV and MLP layer pairs; softmax/activation not modelled). 20/20 fused configurations are bit-exact
+against an independent numpy reference (including requantisation).
+Result on 8 chains x A-buffer sizes of 2 / 8 / 32 KB (conservative: barriers between phases and blocks, per-tile
+requantisation cost included): fusion was faster in only 5/20 cases (geomean cycles ratio 1.10, i.e. ~10 % *slower*), and
+lowered traffic in 8/20 (geomean bytes 1.55x). Best cases: attn_s64_d32 at 32 KB (0.96x cycles, 0.92x bytes) and
+MLP batch-1 (0.99x). The reason is structural: the intermediate round trip is eliminated exactly (verified), but B1 and B2 are
+re-streamed once per row block, and the intermediate block must fit beside the working tiles, so small buffers force
+tiny blocks (wideN1: 256 blocks, 3.3x slower at 2 KB). Fusion would need either much larger on-chip memory, weight
+retention across blocks, or cross-phase overlap (not modelled) to pay off. This is a negative-but-informative result
+under these assumptions, not evidence that fusion cannot help on other hardware.
 
 ## Getting the RTL compiled and simulated (the one thing still open)
 Option 1 - GitHub does it for you: push the repo; `.github/workflows/ci.yml` installs Icarus Verilog and Verilator, runs

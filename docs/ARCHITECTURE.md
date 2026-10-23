@@ -69,7 +69,7 @@ RTL counters: total cycles, compute-busy, compute-wait (waiting on DMA), DMA-bus
 ## 8. Known limitations (read before quoting results)
 
 * Unrolled descriptor programs: program memory grows with iteration count (see `program_bytes` in the report). A hardware loop generator is not implemented.
-* Conv is lowered by im2col with the lowered matrix counted in traffic (no sliding-window reuse); attention = two GEMMs, no softmax, no score-matrix fusion; MLP = GEMM chain with no inter-layer retention.
+* Conv is lowered by im2col with the lowered matrix counted in traffic (no sliding-window reuse); attention = two GEMMs, no softmax; MLP = GEMM chain. Fusion of two-GEMM chains is implemented in the MODEL ONLY (`armse/fused.py`: resident-A and no-writeback program modes, requantisation cost per output tile); the RTL has no requantiser and no independent stride field for a resident operand, so fused programs cannot run on it.
 * Buffer partitioning between A/B/O is fixed at design time (per-buffer capacity), not dynamically re-partitioned.
 * Single DMA channel, single outstanding burst, idealised unaligned access, no bus errors.
 * Level-2 energy uses illustrative constants; no measured energy.
