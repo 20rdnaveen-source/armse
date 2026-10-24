@@ -155,18 +155,18 @@ Level-2 values use ILLUSTRATIVE per-event energies (armse/energy.py) and are an 
 
 ## 9. Cost of the architecture (what is and is not measured)
 
-On-chip data memory: 8192 B (65536 bits) - identical for all policies by construction. The unrolled descriptor programs are an extra cost of this implementation (128-bit entries); a hardware loop generator would remove most of it but is not implemented. Host-side scheduler time is Python wall clock (not a hardware cost).
+On-chip data memory: 8192 B (65536 bits) - identical for all policies by construction. The unrolled descriptor programs are an extra cost of this implementation (128-bit entries); a simple repeat-with-delta compressor shrinks it only ~1.4x (results/PROGRAM_COMPRESSION.md) while streaming it from external memory costs ~1 % cycles (results/PROGRAM_STREAMING.md); neither is implemented in the RTL. Host-side scheduler time is Python wall clock (not a hardware cost).
 
 | policy | program_bytes_mean | program_bytes_max | sched_ms_mean | sched_ms_max | buf_util_mean |
 |---|---|---|---|---|---|
-| A_direct | 1216926.400 | 12591104 | 0.020 | 0.030 | 0.037 |
-| B_fixed_single | 5608.000 | 28672 | 0.018 | 0.027 | 0.574 |
-| C_best_square | 5762.133 | 28672 | 93.965 | 482.503 | 0.747 |
-| C_fixed_double | 39181.333 | 212992 | 0.010 | 0.021 | 0.316 |
-| D_adaptive | 11445.867 | 57344 | 204.196 | 512.514 | 0.576 |
-| D_feedback | 11108.267 | 57344 | 230.478 | 547.014 | 0.593 |
+| A_direct | 1216926.400 | 12591104 | 0.032 | 0.074 | 0.037 |
+| B_fixed_single | 5608.000 | 28672 | 0.040 | 0.212 | 0.574 |
+| C_best_square | 5762.133 | 28672 | 112.147 | 521.344 | 0.747 |
+| C_fixed_double | 39181.333 | 212992 | 0.017 | 0.024 | 0.316 |
+| D_adaptive | 11445.867 | 57344 | 369.312 | 986.283 | 0.576 |
+| D_feedback | 11108.267 | 57344 | 399.539 | 974.649 | 0.593 |
 
 Structural datapath size from the RTL source: NB 8x8 multipliers + adder tree, 2 skewed banked buffers (NB banks each), 1 output buffer (2 read ports), 2 descriptor sequencers, 1 burst DMA. **LUT / FF / DSP counts, timing closure and Fmax were NOT measured: no synthesis tool was available.**
 
 
-_Generated in 86 s._
+_Generated in 137 s._

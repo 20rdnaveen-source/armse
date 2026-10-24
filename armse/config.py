@@ -57,6 +57,7 @@ class HwConfig:
     bank_mode: str = "skew"
     max_dim: int = 255          # tile fields are 8 bits in the descriptor format
     max_entries: int = 1048575  # dependency counters / descriptor indices are 20 bits
+    prog_fetch_block: int = 0   # MODEL ONLY: >0 streams descriptors from external memory in blocks of this many DMA entries
  
     def __post_init__(self):
         if self.lanes < 4 or self.lanes & (self.lanes - 1):
@@ -65,6 +66,8 @@ class HwConfig:
             raise ValueError("bus_bytes must be a positive multiple of 4")
         if self.bank_mode not in ("skew", "naive"):
             raise ValueError("bank_mode must be 'skew' or 'naive'")
+        if self.prog_fetch_block < 0:
+            raise ValueError("prog_fetch_block must be >= 0")
         if min(self.a_depth, self.b_depth, self.o_words) < 0:
             raise ValueError("buffer sizes must be non-negative")
  
@@ -97,6 +100,7 @@ class Workload:
     family: str = "gemm"
     op: str = "gemm"
     out_bytes: int = 4          # bytes per output element written to external memory (4 = int32, 1 = requantised int8)
+    weight_bits: int = 8        # MODEL ONLY: external storage width of B (8, or 4 = packed INT4 + per-column 16-bit scale per tile load)
  
     @property
     def macs(self) -> int:

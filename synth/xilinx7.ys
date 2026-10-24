@@ -1,0 +1,9 @@
+# Yosys resource estimate for the ARMSE RTL, mapped to Xilinx 7-series primitives.
+# Run from the project root:   yosys -l synth/yosys_xilinx7.log -s synth/xilinx7.ys
+# NOTE: written by the author but NOT executed (no Yosys in the authoring sandbox).
+read_verilog -I rtl rtl/armse_skew_mem.v rtl/armse_obuf.v rtl/armse_dma.v rtl/armse_compute.v rtl/armse_top.v
+# program memories are sized down so the estimate is not dominated by 2 x 4096 x 128-bit async-read arrays
+chparam -set PROG_DEPTH 256 armse_top
+hierarchy -check -top armse_top
+synth_xilinx -family xc7 -top armse_top
+tee -o synth/xilinx7_stat.txt stat -width

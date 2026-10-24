@@ -1,18 +1,18 @@
 import os
 import sys
 import unittest
-
+ 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
 from armse.config import HwConfig, Workload, NoFitError
 from armse.schedule import Schedule, build_program
 from armse.sim import simulate, reference, random_operands
 from armse.fused import *
-
-
+ 
+ 
 class TestFused(unittest.TestCase):
     hw = HwConfig(a_depth=1024)
-
+ 
     def test_no_wb_and_out_bytes(self):
         wl = Workload("g", 13, 11, 29, out_bytes=1)
         A, B = random_operands(wl, 3)
@@ -24,14 +24,14 @@ class TestFused(unittest.TestCase):
         self.assertEqual(r2.metrics["bytes_wr"], 13 * 11)               # int8 writeback = 1 byte/element
         with self.assertRaises(Exception):
             build_program(Workload("g", 4, 4, 4, out_bytes=2), self.hw, Schedule(1, 1, 1))
-
+ 
     def test_resident_operand_matches_reference(self):
         wl = Workload("r", 9, 10, 32)
         A, B = random_operands(wl, 4)
         s = Schedule(3, 4, 16, "NM", 2, 2)
         r = simulate(build_program(wl, self.hw.replace(a_depth=10 ** 6), s, a_resident=True), A, B, functional=True)
         np.testing.assert_array_equal(r.C, reference(A, B))
-
+ 
     def test_fused_and_unfused_equal_independent_reference(self):
         for ch in (Chain("c1", 20, 24, 24, 10), Chain("c2", 17, 33, 40, 9, shift=6), Chain("c3", 1, 19, 16, 5),
                    Chain("c4", 30, 40, 64, 12, shift=10)):
@@ -44,7 +44,7 @@ class TestFused(unittest.TestCase):
                     continue
                 f = run_fused(ch, self.hw, tm, data)
                 np.testing.assert_array_equal(f["C2"], ref, err_msg=f"{ch.name} tm={tm}")
-
+ 
     def test_fused_eliminates_the_intermediate_write(self):
         # Exact property: the M*N1 int8 intermediate is never written to external memory when fused.
         # (Total traffic is NOT guaranteed lower: both searches minimise cycles and may re-stream weights.)
@@ -54,16 +54,48 @@ class TestFused(unittest.TestCase):
         u = run_unfused(ch, hw)
         self.assertEqual(f["bytes_wr"], 4 * ch.M * ch.N2)
         self.assertEqual(u["bytes_wr"] - f["bytes_wr"], ch.M * ch.N1)
-
+ 
     def test_no_fit(self):
         ch = Chain("big", 64, 16, 4096, 16)
         with self.assertRaises(NoFitError):
             run_fused(ch, HwConfig(a_depth=64), 8)
-
+ 
     def test_requant_semantics(self):
         x = np.array([-100000, -256, -1, 0, 255, 256, 100000], np.int32)
         np.testing.assert_array_equal(requant(x, 8), np.array([-128, -1, -1, 0, 0, 1, 127], np.int8))
-
-
+ 
+ 
 if __name__ == "__main__":
     unittest.main()
+ 
+ 
+class TestProgCompress(unittest.TestCase):
+    def test_lossless_roundtrip_and_gain(self):
+        import random
+        from armse.progcompress import encode, decode, analyse, cost_entries
+        from armse.scheduler import policy_C
+        rng = random.Random(5)
+        for _ in range(200):                                   # random vector streams incl. irregular ones
+            n = rng.randint(0, 60)
+            v = [tuple(rng.randint(0, 3) for _ in range(4)) for _ in range(n)]
+            self.assertEqual(decode(encode(v)), v)
+        hw = HwConfig()
+        wl = Workload("big", 128, 128, 128)
+        a = analyse(build_program(wl, hw, policy_C(wl, hw)))
+        self.assertLess(a["compressed"], a["raw"])             # regular loop nests do compress
+ 
+ 
+class TestStreaming(unittest.TestCase):
+    def test_streaming_off_is_identical_and_on_is_slower(self):
+        from armse.scheduler import policy_C
+        wl = Workload("s", 64, 64, 64)
+        hw = HwConfig()
+        s = policy_C(wl, hw)
+        base = simulate(build_program(wl, hw, s)).cycles
+        self.assertEqual(simulate(build_program(wl, hw.replace(prog_fetch_block=0), s)).cycles, base)
+        on = simulate(build_program(wl, hw.replace(prog_fetch_block=8), s)).cycles
+        self.assertGreater(on, base)
+        A, B = random_operands(wl, 2)
+        r = simulate(build_program(wl, hw.replace(prog_fetch_block=8), s), A, B, functional=True)
+        np.testing.assert_array_equal(r.C, reference(A, B))        # timing changes, results do not
+ 

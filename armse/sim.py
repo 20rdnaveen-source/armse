@@ -20,11 +20,21 @@ from .schedule import Program, LA, LB, WB
  
  
 def dma_beats(hw: HwConfig, op) -> int:
+    if op.ebits:                                   # packed (compressed) elements
+        return cdiv(op.cols * op.ebits, 8 * hw.bus_bytes)
     return cdiv(op.cols * op.ebytes, hw.bus_bytes)
  
  
+def load_bytes(op) -> int:
+    """External bytes of a load job (compressed loads also carry a 2-byte scale per column)."""
+    if op.ebits:
+        return cdiv(op.rows * op.cols * op.ebits, 8) + 2 * op.cols
+    return op.rows * op.cols
+ 
+ 
 def dma_dur(hw: HwConfig, op) -> int:
-    return hw.job_ovh + op.rows * (hw.row_fix + dma_beats(hw, op))
+    extra = cdiv(2 * op.cols, hw.bus_bytes) if op.ebits else 0          # scale vector fetched with the tile
+    return hw.job_ovh + op.rows * (hw.row_fix + dma_beats(hw, op)) + extra
  
  
 def conflict_factor(hw: HwConfig, tn: int) -> int:
@@ -57,6 +67,10 @@ def schedule_times(prog: Program):
     ds, de, cs, ce = [0] * nd, [0] * nd, [0] * nc, [0] * nc
     di = ci = 0
     dfree = cfree = hw.start_off
+    blk = hw.prog_fetch_block
+    fetch = 0
+    if blk and nd:                      # one burst per block: blk DMA entries + proportional compute entries
+        fetch = hw.job_ovh + hw.row_fix + cdiv(16 * (blk + cdiv(blk * nc, nd)), hw.bus_bytes)
     while di < nd or ci < nc:
         moved = False
         if di < nd:
@@ -65,7 +79,7 @@ def schedule_times(prog: Program):
             if dep <= ci:
                 t = ce[dep - 1] if dep > 0 else 0
                 s = dfree if dfree > t else t
-                ds[di], de[di] = s, s + dma_dur(hw, op)
+                ds[di], de[di] = s, s + dma_dur(hw, op) + (fetch if blk and di % blk == 0 else 0)
                 dfree = de[di]
                 di += 1
                 moved = True
@@ -129,7 +143,7 @@ def metrics_of(prog: Program, ds, de, cs, ce) -> dict:
     for j in range(nc):
         stall += cs[j] - prev
         prev = ce[j]
-    brd = sum(op.rows * op.cols for op in prog.dma if op.kind != WB)
+    brd = sum(load_bytes(op) for op in prog.dma if op.kind != WB)
     bwr = sum(op.ebytes * op.rows * op.cols for op in prog.dma if op.kind == WB)
     issue = sum(cmp_issue(hw, c) for c in prog.cmp)
     ideal_issue = sum(c.tm * c.tn * cdiv(c.tk, hw.lanes) for c in prog.cmp)

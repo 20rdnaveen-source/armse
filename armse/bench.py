@@ -17,17 +17,17 @@ from .analytic import estimate
 from .workloads import suite, smoke_suite
 from .scheduler import _RANK_CACHE, POLICIES, ABLATIONS, ranked, fixed_square_size, policy_B, policy_C, policy_D, policy_D_fb
 from . import banks, energy
-
+ 
 HW = HwConfig()
 BASE = "C_fixed_double"
 STRONG = "C_best_square"
-
-
+ 
+ 
 def gm(x):
     x = [v for v in x if v > 0]
     return math.exp(sum(math.log(v) for v in x) / len(x)) if x else float("nan")
-
-
+ 
+ 
 def md(df, floatfmt="{:.3f}"):
     cols = list(df.columns)
     out = ["| " + " | ".join(str(c) for c in cols) + " |", "|" + "|".join("---" for _ in cols) + "|"]
@@ -38,8 +38,8 @@ def md(df, floatfmt="{:.3f}"):
             cells.append(floatfmt.format(v) if isinstance(v, float) else str(v))
         out.append("| " + " | ".join(cells) + " |")
     return "\n".join(out)
-
-
+ 
+ 
 def run_policy(wl, hw, name, fn, verify=False):
     _RANK_CACHE.clear()                      # every policy pays for its own candidate ranking
     t0 = time.perf_counter()
@@ -60,8 +60,8 @@ def run_policy(wl, hw, name, fn, verify=False):
              est_cycles=est["cycles"], est_bytes=est["bytes_rd"] + est["bytes_wr"],
              sched_ms=1000 * t_sched, verified=ok, iters=len(p.cmp))
     return m
-
-
+ 
+ 
 def main(out="results"):
     os.makedirs(out, exist_ok=True)
     rep = []
@@ -72,7 +72,7 @@ def main(out="results"):
                f"lanes={HW.lanes}, bus={HW.bus_bytes} B/cycle, row_lat={HW.row_lat}, A/B buffers "
                f"{HW.lanes * HW.a_depth} B each, O buffer {4 * HW.o_words} B, total on-chip {HW.onchip_bytes} B. "
                f"Fixed square tile: single={fixed_square_size(HW, 1, 1)}, double={fixed_square_size(HW, 2, 2)}.\n")
-
+ 
     # ---------------- 1. main suite ----------------
     rows = []
     for wl in W:
@@ -87,7 +87,7 @@ def main(out="results"):
     rep.append(f"## 1. Correctness\n\n{nver} (workload, policy) runs were executed functionally and compared "
                f"bit-exactly with an independent int64 numpy reference: {nbad} mismatches. "
                f"All {len(df)} runs passed the deadlock and buffer-hazard checks.\n")
-
+ 
     piv = df.pivot(index="workload", columns="policy", values="cycles").reindex([w.name for w in W])
     pol = list(POLICIES)
     rel = piv.div(piv[BASE], axis=0)
@@ -117,7 +117,7 @@ def main(out="results"):
                f"{len(wl_loss_d)} workloads ({', '.join(wl_loss_d) or 'none'}); D_feedback on {len(wl_loss)} "
                f"({', '.join(wl_loss) or 'none'}). Workloads whose runtime is compute-bound leave nothing for "
                f"memory scheduling to win (see section 4).\n")
-
+ 
     # ---------------- 3. estimator calibration ----------------
     d = df.copy()
     d["err"] = (d.est_cycles - d.cycles) / d.cycles.clip(lower=1)
@@ -141,7 +141,7 @@ def main(out="results"):
         rank_hits += int(sims.index(min(sims)) == 0)
     rep.append(f"Ranking quality: the estimator's #1 candidate was also the best of its own top-8 (by simulation) "
                f"on {rank_hits}/{rk} workloads; D_feedback closes the rest of the gap.\n")
-
+ 
     # ---------------- 4. roofline + attribution ----------------
     peak_ops = 2 * HW.lanes
     bal = peak_ops / HW.bus_bytes
@@ -162,7 +162,7 @@ def main(out="results"):
                f"{HW.bus_bytes} B/cycle = {bal:.1f} ops/B. AI_compulsory = 2MNK / (MK+KN+4MN).  "
                "`cmp_frac` = compute-busy / total, `stall_frac` = compute idle waiting on memory / total, "
                "`dma_*` split DMA-busy time into per-job sync, per-burst latency and data beats.\n\n" + md(rl) + "\n")
-
+ 
     # ---------------- 5. ablations ----------------
     ab = []
     for name, fn in ABLATIONS.items():
@@ -176,7 +176,7 @@ def main(out="results"):
     ab = pd.DataFrame(ab)
     ab.to_csv(f"{out}/ablation.csv", index=False)
     rep.append("## 5. Ablation of D's three features (estimator-selected, cycles vs C_fixed_double)\n\n" + md(ab) + "\n")
-
+ 
     # ---------------- 6. sweeps ----------------
     SW = smoke_suite()
     sweep = []
@@ -211,7 +211,7 @@ def main(out="results"):
     bw = pd.DataFrame(bw)
     bw.to_csv(f"{out}/bandwidth_sweep.csv", index=False)
     rep.append("## 6b. Bandwidth / latency sweep (smoke suite). Note: RTL implements bus=4 only.\n\n" + md(bw) + "\n")
-
+ 
     # ---------------- 7. banking ----------------
     hwn = HW.replace(bank_mode="naive")
     bk = []
@@ -235,7 +235,7 @@ def main(out="results"):
                f"\n\nSynthetic stride study (8 banks, strides 1..64): naive linear mapping conflicts for {worst}/64 "
                f"strides (worst case {max(r[1] for r in rows_)} extra cycles); uniformly random 8-way access averages "
                f"{rnd:.2f} extra cycles per access vector (unavoidable without a conflict-aware mapping).\n")
-
+ 
     # ---------------- 8. energy ----------------
     en = []
     for wl in W:
@@ -255,7 +255,7 @@ def main(out="results"):
                "per-event energies (armse/energy.py) and are an analytical estimate, **not measured energy**; "
                "Level 3 (board measurement) was not performed. Geomean total-energy ratio across the suite, with a "
                "sensitivity sweep on the external-memory energy:\n\n" + md(et) + "\n")
-
+ 
     # ---------------- 9. cost ----------------
     ov = df.groupby("policy").agg(program_bytes_mean=("program_bytes", "mean"), program_bytes_max=("program_bytes", "max"),
                                   sched_ms_mean=("sched_ms", "mean"), sched_ms_max=("sched_ms", "max"),
@@ -270,7 +270,7 @@ def main(out="results"):
                "Structural datapath size from the RTL source: NB 8x8 multipliers + adder tree, 2 skewed banked buffers "
                "(NB banks each), 1 output buffer (2 read ports), 2 descriptor sequencers, 1 burst DMA. "
                "**LUT / FF / DSP counts, timing closure and Fmax were NOT measured: no synthesis tool was available.**\n")
-
+ 
     # ---------------- plots ----------------
     fig, ax = plt.subplots(figsize=(13, 4.5))
     names = list(piv.index)
@@ -297,12 +297,13 @@ def main(out="results"):
     fig.tight_layout()
     fig.savefig(f"{out}/capacity_sweep.png", dpi=130)
     plt.close(fig)
-
+ 
     rep.append(f"\n_Generated in {time.time() - T0:.0f} s._\n")
     with open(f"{out}/REPORT.md", "w") as f:
         f.write("\n".join(rep))
     print("done", f"{time.time() - T0:.0f}s")
-
-
+ 
+ 
 if __name__ == "__main__":
     main(sys.argv[1] if len(sys.argv) > 1 else "results")
+ 

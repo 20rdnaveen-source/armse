@@ -1,29 +1,29 @@
 """Benchmark suite. Conv, attention and MLP are lowered to INT8 GEMM (see docs for limitations)."""
 from .config import Workload
-
-
+ 
+ 
 def gemm(name, M, N, K, family="gemm"):
     return Workload(name, M, N, K, family)
-
-
+ 
+ 
 def conv2d(name, H, W, Cin, Cout, k, stride=1, pad=0):
     """im2col lowering: M = OH*OW, K = Cin*k*k, N = Cout.  Traffic counts the *lowered* A matrix,
     i.e. sliding-window input reuse is NOT modelled (conservative for conv)."""
     oh = (H + 2 * pad - k) // stride + 1
     ow = (W + 2 * pad - k) // stride + 1
     return Workload(name, oh * ow, Cout, Cin * k * k, "conv")
-
-
+ 
+ 
 def attention(name, seq, d):
     """QK^T and PV as two GEMMs (softmax and fusion of the score matrix are out of scope)."""
     return [Workload(f"{name}_QKt", seq, seq, d, "attention"),
             Workload(f"{name}_PV", seq, d, seq, "attention")]
-
-
+ 
+ 
 def mlp(name, batch, dims):
     return [Workload(f"{name}_L{i}", batch, dims[i + 1], dims[i], "mlp") for i in range(len(dims) - 1)]
-
-
+ 
+ 
 def suite():
     s = []
     for n in (16, 32, 64, 128, 192, 256):
@@ -48,9 +48,24 @@ def suite():
     s += [gemm("stress_512x512x64", 512, 512, 64, "stress"),
           gemm("stress_64x64x2048", 64, 64, 2048, "stress")]
     return s
-
-
+ 
+ 
 def smoke_suite():
     return [w for w in suite() if w.name in (
         "gemm_sq64", "gemv_1x256x256", "tall_512x16x64", "ragged_37x29x53", "mlp_b32_L0",
         "conv3x3_16to32_28", "attn_s64_d32_QKt", "deepK_32x32x1024")]
+ 
+ 
+def kv_decode(name, L, d):
+    """One autoregressive decode step over a KV cache of length L (INT8): scores = q.K^T (M=1,K=d,N=L) and
+    out = p.V (M=1,K=L,N=d). Softmax is not modelled. Memory-bound by construction (every cache byte is used once)."""
+    return [Workload(f"{name}_QK", 1, L, d, "kv_decode"), Workload(f"{name}_PV", 1, d, L, "kv_decode")]
+ 
+ 
+def depthwise(name, H, W, C, k, stride=1, pad=0):
+    """Depthwise k x k conv: C independent single-channel convolutions, each lowered to GEMM M=OH*OW, K=k*k, N=1.
+    Returns (one-channel Workload, C). Lane-parallel-over-K mapping wastes lanes (K is tiny): see edgestudy."""
+    oh = (H + 2 * pad - k) // stride + 1
+    ow = (W + 2 * pad - k) // stride + 1
+    return Workload(name, oh * ow, 1, k * k, "depthwise"), C
+ 

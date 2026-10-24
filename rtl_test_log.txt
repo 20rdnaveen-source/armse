@@ -17,4 +17,84 @@ CYCLES t06_retain measured=2299 model=2299 delta=0 | cmp_busy=1179 (model 1179) 
 RESULT t06_retain: PASS
 CYCLES t07_kloop_single measured=1332 model=1332 delta=0 | cmp_busy=660 (model 660) dma_busy=658 (model 658) cmp_wait=548 dma_wait=664
 RESULT t07_kloop_single: PASS
+CYCLES trand00 measured=318 model=318 delta=0 | cmp_busy=35 (model 35) dma_busy=272 (model 272) cmp_wait=267 dma_wait=38
+RESULT trand00: PASS
+CYCLES trand01 measured=5459 model=5459 delta=0 | cmp_busy=4872 (model 4872) dma_busy=3334 (model 3334) cmp_wait=476 dma_wait=2008
+RESULT trand01: PASS
+CYCLES trand02 measured=281 model=281 delta=0 | cmp_busy=40 (model 40) dma_busy=250 (model 250) cmp_wait=223 dma_wait=5
+RESULT trand02: PASS
+CYCLES trand03 measured=2891 model=2891 delta=0 | cmp_busy=270 (model 270) dma_busy=2520 (model 2520) cmp_wait=2582 dma_wait=300
+RESULT trand03: PASS
+CYCLES trand04 measured=999 model=999 delta=0 | cmp_busy=675 (model 675) dma_busy=920 (model 920) cmp_wait=280 dma_wait=57
+RESULT trand04: PASS
+CYCLES trand05 measured=2929 model=2929 delta=0 | cmp_busy=1056 (model 1056) dma_busy=1830 (model 1830) cmp_wait=1843 dma_wait=1068
+RESULT trand05: PASS
+CYCLES trand06 measured=14548 model=14548 delta=0 | cmp_busy=7843 (model 7843) dma_busy=13593 (model 13593) cmp_wait=6369 dma_wait=264
+RESULT trand06: PASS
+CYCLES trand07 measured=1233 model=1233 delta=0 | cmp_busy=180 (model 180) dma_busy=1068 (model 1068) cmp_wait=1032 dma_wait=134
+RESULT trand07: PASS
+CYCLES trand08 measured=1287 model=1287 delta=0 | cmp_busy=468 (model 468) dma_busy=804 (model 804) cmp_wait=728 dma_wait=472
+RESULT trand08: PASS
+CYCLES trand09 measured=2197 model=2197 delta=0 | cmp_busy=714 (model 714) dma_busy=1606 (model 1606) cmp_wait=1414 dma_wait=548
+RESULT trand09: PASS
+CYCLES trand10 measured=6326 model=6326 delta=0 | cmp_busy=1875 (model 1875) dma_busy=4120 (model 4120) cmp_wait=4333 dma_wait=1980
+RESULT trand10: PASS
+CYCLES trand11 measured=326 model=326 delta=0 | cmp_busy=137 (model 137) dma_busy=230 (model 230) cmp_wait=154 dma_wait=85
+RESULT trand11: PASS
+CYCLES trand12 measured=3733 model=3733 delta=0 | cmp_busy=1910 (model 1910) dma_busy=1770 (model 1770) cmp_wait=1774 dma_wait=1926
+RESULT trand12: PASS
+CYCLES trand13 measured=265 model=265 delta=0 | cmp_busy=66 (model 66) dma_busy=237 (model 237) cmp_wait=166 dma_wait=12
+RESULT trand13: PASS
+CYCLES trand14 measured=2905 model=2905 delta=0 | cmp_busy=828 (model 828) dma_busy=2034 (model 2034) cmp_wait=2048 dma_wait=840
+RESULT trand14: PASS
+CYCLES trand15 measured=4873 model=4873 delta=0 | cmp_busy=1038 (model 1038) dma_busy=4229 (model 4229) cmp_wait=3773 dma_wait=583
+RESULT trand15: PASS
+CYCLES trand16 measured=1617 model=1617 delta=0 | cmp_busy=249 (model 249) dma_busy=1569 (model 1569) cmp_wait=1342 dma_wait=5
+RESULT trand16: PASS
+CYCLES trand17 measured=1396 model=1396 delta=0 | cmp_busy=414 (model 414) dma_busy=953 (model 953) cmp_wait=965 dma_wait=422
+RESULT trand17: PASS
+CYCLES trand18 measured=1230 model=1230 delta=0 | cmp_busy=528 (model 528) dma_busy=1160 (model 1160) cmp_wait=608 dma_wait=55
+RESULT trand18: PASS
+CYCLES trand19 measured=4101 model=4101 delta=0 | cmp_busy=621 (model 621) dma_busy=3867 (model 3867) cmp_wait=3364 dma_wait=5
+RESULT trand19: PASS
+CYCLES trand20 measured=4707 model=4707 delta=0 | cmp_busy=1988 (model 1988) dma_busy=2630 (model 2630) cmp_wait=2664 dma_wait=2016
+RESULT trand20: PASS
+CYCLES trand21 measured=309 model=309 delta=0 | cmp_busy=60 (model 60) dma_busy=292 (model 292) cmp_wait=232 dma_wait=6
+RESULT trand21: PASS
+CYCLES trand22 measured=13399 model=13399 delta=0 | cmp_busy=1056 (model 1056) dma_busy=13152 (model 13152) cmp_wait=12239 dma_wait=6
+RESULT trand22: PASS
+CYCLES trand23 measured=8577 model=8577 delta=0 | cmp_busy=5680 (model 5680) dma_busy=6718 (model 6718) cmp_wait=2704 dma_wait=1534
+RESULT trand23: PASS
+CYCLES trand24 measured=2389 model=2389 delta=0 | cmp_busy=1364 (model 1364) dma_busy=2099 (model 2099) cmp_wait=957 dma_wait=163
+RESULT trand24: PASS
+CYCLES trand25 measured=607 model=607 delta=0 | cmp_busy=138 (model 138) dma_busy=470 (model 470) cmp_wait=440 dma_wait=122
+RESULT trand25: PASS
+CYCLES trand26 measured=807 model=807 delta=0 | cmp_busy=111 (model 111) dma_busy=709 (model 709) cmp_wait=683 dma_wait=88
+RESULT trand26: PASS
+CYCLES trand27 measured=1339 model=1339 delta=0 | cmp_busy=336 (model 336) dma_busy=1058 (model 1058) cmp_wait=972 dma_wait=260
+RESULT trand27: PASS
+CYCLES trand28 measured=1373 model=1373 delta=0 | cmp_busy=156 (model 156) dma_busy=1132 (model 1132) cmp_wait=1185 dma_wait=180
+RESULT trand28: PASS
+CYCLES trand29 measured=4017 model=4017 delta=0 | cmp_busy=2128 (model 2128) dma_busy=1836 (model 1836) cmp_wait=1861 dma_wait=2144
+RESULT trand29: PASS
+CYCLES trand30 measured=3935 model=3935 delta=0 | cmp_busy=672 (model 672) dma_busy=3738 (model 3738) cmp_wait=3169 dma_wait=7
+RESULT trand30: PASS
+CYCLES trand31 measured=2559 model=2559 delta=0 | cmp_busy=488 (model 488) dma_busy=1966 (model 1966) cmp_wait=2024 dma_wait=520
+RESULT trand31: PASS
+CYCLES trand32 measured=10387 model=10387 delta=0 | cmp_busy=4356 (model 4356) dma_busy=9914 (model 9914) cmp_wait=5792 dma_wait=12
+RESULT trand32: PASS
+CYCLES trand33 measured=588 model=588 delta=0 | cmp_busy=114 (model 114) dma_busy=445 (model 445) cmp_wait=447 dma_wait=122
+RESULT trand33: PASS
+CYCLES trand34 measured=3313 model=3313 delta=0 | cmp_busy=870 (model 870) dma_busy=2382 (model 2382) cmp_wait=2407 dma_wait=888
+RESULT trand34: PASS
+CYCLES trand35 measured=6644 model=6644 delta=0 | cmp_busy=2898 (model 2898) dma_busy=3823 (model 3823) cmp_wait=3641 dma_wait=2706
+RESULT trand35: PASS
+CYCLES trand36 measured=3375 model=3375 delta=0 | cmp_busy=734 (model 734) dma_busy=2790 (model 2790) cmp_wait=2612 dma_wait=544
+RESULT trand36: PASS
+CYCLES trand37 measured=385 model=385 delta=0 | cmp_busy=131 (model 131) dma_busy=298 (model 298) cmp_wait=229 dma_wait=76
+RESULT trand37: PASS
+CYCLES trand38 measured=6337 model=6337 delta=0 | cmp_busy=576 (model 576) dma_busy=5536 (model 5536) cmp_wait=5687 dma_wait=640
+RESULT trand38: PASS
+CYCLES trand39 measured=880 model=880 delta=0 | cmp_busy=473 (model 473) dma_busy=777 (model 777) cmp_wait=387 dma_wait=88
+RESULT trand39: PASS
 RTL TESTS: ALL PASS
