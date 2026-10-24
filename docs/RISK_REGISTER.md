@@ -1,0 +1,22 @@
+# Risk register (status at time of writing)
+
+L = likelihood, I = impact (H/M/L). "Evidence" refers to files in this repository.
+
+| ID | Category | Risk | L | I | Evidence / current status | Mitigation |
+|---|---|---|---|---|---|---|
+| R1 | Novelty | Core idea (cost-model tile/buffer search) already established; no defensible novelty | H | H | no literature search possible; scheduler idea resembles mapping-search tools | run `docs/LITERATURE_SEARCH_PROMPT.md` in a search-enabled session; position the work as a verified reference stack with negative results unless a gap is found |
+| R2 | Verification | RTL only partly simulated (7 fixed cases in Icarus; 40 random pending); no reset-during-run, illegal-address or unsupported-op tests in RTL | M | H | `rtl_vectors/`, `scripts/run_rtl_tests.ps1` | run the 40 random cases; add directed tests for those items before any hardware claim |
+| R3 | Implementation | Unknown Fmax / resources; async-read memories map to LUT-RAM on small devices | M | H | `synth/xilinx7.ys` written, not run | run Yosys/vendor flow on a chosen part; add a sync-read variant and update the timing contract |
+| R4 | Model validity | Idealised external memory (sustained = peak, unaligned rows, one burst) | H | M | `docs/ARCHITECTURE.md` sec. 2 | measure on a board; replace `row_lat`, `bus_bytes`; rerun benchmarks |
+| R5 | Generality | Headline results from one hardware configuration and 30 workloads | M | M | capacity/bandwidth sweeps only on an 8-workload subset | extend sweeps to the full suite and to lanes/bus variants |
+| R6 | Performance | Adaptive advantage vanishes at large buffers (0.963x at 4x) and on compute-bound workloads (25/30) | H | M | `results/REPORT.md` sec. 4, 6a | state scope: small buffers, memory-/latency-bound shapes |
+| R7 | Baseline fairness | C_best_square and D_feedback use simulator-in-the-loop information | M | M | documented in report | model profiling cost explicitly; report D_adaptive (estimator only) alongside |
+| R8 | Energy | Only Level-1/2 energy; adaptive schedules read more bytes than best square tiling (L2 energy 1.187x) | H | M | `results/REPORT.md` sec. 8 | board power measurement; do not claim energy gains |
+| R9 | Accuracy | INT4 weight candidate's accuracy loss is not evaluated | H | H | `results/COMPRESSION_CANDIDATE.md` | quantisation-aware training/PTQ study on real models before adopting C3 |
+| R10 | Scope | Fusion negative at <= 32 KB; extending it costs RTL (requantiser, resident-operand stride) | M | M | `results/FUSION_OVERLAP.md` | keep model-only until larger on-chip memory is available |
+| R11 | Cost | Descriptor programs larger than data memory (mean 11.4 KB vs 8 KB for D) | M | M | `results/PROGRAM_COMPRESSION.md`, `PROGRAM_STREAMING.md` | stream descriptors (model +1.3 %) or shrink programs; implement only if needed |
+| R12 | Estimator | Estimator top-1 equals best-of-top-8 on only 12/30 workloads; 5.1 % mean / 14.6 % max cycle error | M | L | `results/REPORT.md` sec. 3 | use D_feedback; improve overlap model with held-out workloads |
+| R13 | Integration | Existing digit-accelerator repo not inspected; adapter interface/timing unknown | M | M | not started | inspect source and baseline first; keep ARMSE independently testable |
+| R14 | Environment | No FPGA board; Windows toolchain; no network in the authoring sandbox | H | M | `docs/BOARD_GUIDE.md` | timing/resources via part-targeted flows without a board; defer bandwidth/power |
+| R15 | Scope creep | The second master prompt spans compression, sparsity, PIM/CIM and LLMs | H | M | `docs/EDGE_AI_ATLAS.md` | scope to memory scheduling for small INT8 accelerators; list the rest as out of scope |
+| R16 | Documentation | Recalled citations may be wrong | M | M | `docs/RELATED_WORK.md` | verify every citation in a search-enabled session before use |

@@ -1,0 +1,18 @@
+# Prompt for a search-enabled session: literature review and novelty check for ARMSE
+
+Paste the text between the lines into a chat where web search / deep research is enabled, and attach `docs/TECHNICAL_REPORT.md`, `docs/CANDIDATES.md` and `docs/RESEARCH_DECISION.md`.
+
+---
+You are a scientific literature reviewer for computer architecture and ML systems. Do NOT write code. Use primary sources only (papers, proceedings, official documentation, repositories). Never invent titles, authors, DOIs, numbers or quotations; if you cannot verify something, write "UNVERIFIED".
+
+Project summary (from the attached files): a small INT8 GEMM accelerator memory subsystem with (C1) a cost-model-driven scheduler choosing tile shape, loop order and single/double buffering per workload, (C4) skewed banked operand buffers with de-rotation, decoupled DMA and compute descriptor programs synchronised by two completed-job counters, a loop-nest tile-reuse rule, and (C3/C5) optional INT4 weight storage and descriptor streaming. Measured in simulation only: 0.87x cycles vs the best fixed square tiling on 30 workloads; main gain from tile-shape freedom.
+
+Tasks:
+1. For each mechanism C1, C4, the decoupled two-counter execution model, and the tile-id reuse rule: find the 5 closest prior works. For each, give exact title, authors, year, venue, DOI/arXiv/repository URL, mechanism, hardware/workload assumptions, reported metrics and baselines, acknowledged limitations, and the precise difference from the project.
+2. Seed leads to verify (starting points only, may be wrong): Timeloop/Accelergy, MAESTRO, Interstellar, ZigZag, CoSA, Gemmini, NVDLA, SCALE-Sim, Eyeriss, TVM/Ansor/AutoTVM, MLIR-based tiling, FINN. Report which are genuinely relevant and which are not.
+3. State for each mechanism whether the project's version is: already established / incremental / underexplored / possibly novel, with evidence.
+4. Search specifically for: (a) per-workload adaptive tiling on small-buffer FPGA accelerators with measured RTL results; (b) estimator-versus-simulator calibration studies for such cost models; (c) skewed/rotated banking for operand buffers in systolic or vector MAC designs; (d) descriptor-program size or streaming costs in accelerators; (e) fused GEMM-chain results on small on-chip memories.
+5. Check patents, theses and open-source repositories where accessible; say which you could not access.
+6. Output: (i) a closest-work comparison table, (ii) a verified-references list with a verification status per entry, (iii) a one-page novelty assessment, (iv) the narrowest research question that still looks defensible, (v) a recommendation among: proceed / revise / reject / gather more evidence, with reasons.
+Rules: report negative findings; do not claim "first" or "novel" without evidence; separate established facts, published results, estimates, hypotheses and unknowns.
+---

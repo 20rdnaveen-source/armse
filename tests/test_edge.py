@@ -2,7 +2,7 @@ import os
 import random
 import sys
 import unittest
-
+ 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
 from armse import memplan
@@ -12,8 +12,8 @@ from armse.sim import simulate, reference, random_operands
 from armse.workloads import kv_decode, depthwise
 from armse.edgestudy import clip, pow2_ge
 from armse.scheduler import policy_D
-
-
+ 
+ 
 class TestMemplan(unittest.TestCase):
     def test_random_graphs_valid_and_bounded(self):
         rng = random.Random(3)
@@ -28,7 +28,7 @@ class TestMemplan(unittest.TestCase):
                 self.assertGreaterEqual(arena, memplan.peak_live(ts))          # peak live is a lower bound (align=1 tight)
                 if align == 1:
                     self.assertLessEqual(arena, memplan.naive_total(ts))
-
+ 
     def test_verify_catches_overlap_and_known_cases(self):
         a, b = memplan.Tensor("a", 10, 0, 5), memplan.Tensor("b", 10, 3, 8)
         self.assertFalse(memplan.verify([a, b], {"a": 0, "b": 5}))             # b starts inside a: overlap
@@ -38,17 +38,17 @@ class TestMemplan(unittest.TestCase):
         self.assertEqual(arena, 10)
         self.assertEqual(memplan.peak_live([]), 0)
         self.assertEqual(memplan.plan([]), ({}, 0))
-
+ 
     def test_inplace_never_increases_peak(self):
         for s, d in ((32, 32), (64, 64), (128, 64)):
             a = memplan.peak_live(memplan.transformer_block(s, d))
             b = memplan.peak_live(memplan.transformer_block(s, d, inplace=True))
             self.assertLessEqual(b, a)
-
-
+ 
+ 
 class TestEdgeWorkloads(unittest.TestCase):
     hw = HwConfig()
-
+ 
     def test_kv_decode_shapes_and_correctness(self):
         qk, pv = kv_decode("k", 100, 64)
         self.assertEqual((qk.M, qk.N, qk.K, pv.M, pv.N, pv.K), (1, 100, 64, 1, 64, 100))
@@ -56,13 +56,13 @@ class TestEdgeWorkloads(unittest.TestCase):
             A, B = random_operands(w, 1)
             r = simulate(build_program(w, self.hw, policy_D(w, self.hw)), A, B, functional=True)
             np.testing.assert_array_equal(r.C, reference(A, B))
-
+ 
     def test_depthwise_lowering_and_low_utilisation(self):
         w, c = depthwise("d", 28, 28, 64, 3, 1, 1)
         self.assertEqual((w.M, w.N, w.K, c), (784, 1, 9, 64))
         m = simulate(build_program(w, self.hw, policy_D(w, self.hw))).metrics
         self.assertLess(m["mac_util"], 0.5)
-
+ 
     def test_clipped_static_schedule_is_legal_and_correct(self):
         big = kv_decode("b", 1024, 64)[0]
         s = policy_D(big, self.hw)
@@ -74,12 +74,12 @@ class TestEdgeWorkloads(unittest.TestCase):
             r = simulate(build_program(w, self.hw, c), A, B, functional=True)
             np.testing.assert_array_equal(r.C, reference(A, B))
         self.assertEqual((pow2_ge(1), pow2_ge(33), pow2_ge(64), pow2_ge(65)), (1, 64, 64, 128))
-
-
+ 
+ 
 if __name__ == "__main__":
     unittest.main()
-
-
+ 
+ 
 class TestCompression(unittest.TestCase):
     def test_int4_weights_reduce_bytes_and_keep_results(self):
         from dataclasses import replace
@@ -97,3 +97,4 @@ class TestCompression(unittest.TestCase):
         with self.assertRaises(Exception):
             build_program(replace(wl, weight_bits=3), hw, s)
         self.assertEqual(simulate(build_program(replace(wl, weight_bits=8), hw, s)).metrics, m8)   # default unchanged
+ 
