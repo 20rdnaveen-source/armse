@@ -4,7 +4,7 @@ import os
 import sys
 import numpy as np
 from .config import HwConfig, Workload, ScheduleError
-from .schedule import Schedule, build_program, LA, LB, WB
+from .schedule import Schedule, build_program, violations, LA, LB, WB
 from .sim import simulate, reference, random_operands
 
 DMA_FIELDS = [("TYPE", 2), ("DEP", 20), ("ROWS", 8), ("COLS", 8), ("EXT_ADDR", 32),
@@ -116,12 +116,28 @@ def export_case(outdir, name, dims, lanes, sch, seed=0):
     return m
 
 
-def main(root="."):
+def random_cases(n, seed=21):
+    """Random legal cases for the RTL hardware config (same generator as tests/test_model.py)."""
+    import random
+    rng = random.Random(seed)
+    out = []
+    while len(out) < n:
+        lanes = rng.choice([4, 8])
+        hw = rtl_hw(lanes)
+        wl = Workload("r", rng.randint(1, 26), rng.randint(1, 26), rng.randint(1, 45))
+        s = Schedule(rng.randint(1, wl.M), rng.randint(1, wl.N), rng.randint(1, wl.K),
+                     rng.choice(["MN", "NM"]), rng.choice([1, 2]), rng.choice([1, 2]))
+        if not violations(wl, hw, s):
+            out.append((f"trand{len(out):02d}", (wl.M, wl.N, wl.K), lanes, s))
+    return out
+
+
+def main(root=".", n_random=0):
     with open(os.path.join(root, "rtl", "armse_fields.vh"), "w") as f:
         f.write(fields_vh())
     out = os.path.join(root, "rtl_vectors")
     summary = []
-    for name, dims, lanes, sch in RTL_CASES:
+    for name, dims, lanes, sch in RTL_CASES + random_cases(n_random):
         m = export_case(out, name, dims, lanes, sch)
         summary.append((name, m["cycles"], m["bytes_rd"], m["bytes_wr"], m["transfers"]))
     with open(os.path.join(out, "SUMMARY.txt"), "w") as f:
@@ -132,5 +148,8 @@ def main(root="."):
 
 
 if __name__ == "__main__":
-    for r in main(sys.argv[1] if len(sys.argv) > 1 else "."):
+    args = sys.argv[1:]
+    nrand = int(args[args.index("--random") + 1]) if "--random" in args else 0
+    root = args[0] if args and not args[0].startswith("--") else "."
+    for r in main(root, nrand):
         print(r)

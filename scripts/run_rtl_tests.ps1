@@ -15,7 +15,7 @@ if (-not (Get-Command iverilog -ErrorAction SilentlyContinue)) {
     exit 2
 }
 
-python -m armse.rtlexport . | Out-Null
+python -m armse.rtlexport . --random 40 | Out-Null
 
 $log = Join-Path $root "rtl_test_log.txt"
 "ARMSE RTL test log" | Set-Content $log

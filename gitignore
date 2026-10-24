@@ -1,3 +1,7 @@
 __pycache__/
 *.pyc
-rtl_vectors/*/sim.vvp
+*.vvp
+rtl_test_log.txt
+rtl_lint_log.txt
+results/*.log
+ 
