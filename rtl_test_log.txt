@@ -97,4 +97,14 @@ CYCLES trand38 measured=6337 model=6337 delta=0 | cmp_busy=576 (model 576) dma_b
 RESULT trand38: PASS
 CYCLES trand39 measured=880 model=880 delta=0 | cmp_busy=473 (model 473) dma_busy=777 (model 777) cmp_wait=387 dma_wait=88
 RESULT trand39: PASS
+RESULT post_p00: PASS
+RESULT post_p01: PASS
+RESULT post_p02: PASS
+RESULT post_p03: PASS
+RESULT post_p04: PASS
+RESULT post_p05: PASS
+RESULT post_p06: PASS
+RESULT post_p07: PASS
+RESULT post_p08: PASS
+RESULT post_p09: PASS
 RTL TESTS: ALL PASS

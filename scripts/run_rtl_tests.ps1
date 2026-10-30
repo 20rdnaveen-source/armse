@@ -16,6 +16,7 @@ if (-not (Get-Command iverilog -ErrorAction SilentlyContinue)) {
 }
 
 python -m armse.rtlexport . --random 40 | Out-Null
+python -m armse.quant . | Out-Null
 
 $log = Join-Path $root "rtl_test_log.txt"
 "ARMSE RTL test log" | Set-Content $log
@@ -53,6 +54,27 @@ foreach ($d in Get-ChildItem (Join-Path $root "rtl_vectors") -Directory -Filter 
     }
     $out = & vvp sim.vvp 2>&1 | Out-String
     $lines = ($out -split "`r?`n") | Where-Object { $_ -match "RESULT|CYCLES|ERROR" }
+    $lines | ForEach-Object { Write-Host $_ }
+    $lines | Add-Content $log
+    if ($out -notmatch "RESULT .*: PASS") { $fail = 1 }
+    Pop-Location
+}
+
+# ---- 3. requantisation / ReLU unit (armse_post) ----
+$tbPost = Join-Path $root "tb\tb_post.v"
+$rtlPost = Join-Path $rtlDir "armse_post.v"
+foreach ($d in Get-ChildItem (Join-Path $root "post_vectors") -Directory -Filter "p*") {
+    Push-Location $d.FullName
+    $out = & iverilog -g2005 -I . -o post.vvp $tbPost $rtlPost 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "COMPILE FAILED: post $($d.Name)"; Write-Host $out
+        "COMPILE FAILED: post $($d.Name)`n$out" | Add-Content $log
+        $fail = 1
+        Pop-Location
+        continue
+    }
+    $out = & vvp post.vvp 2>&1 | Out-String
+    $lines = ($out -split "`r?`n") | Where-Object { $_ -match "RESULT|ERROR" }
     $lines | ForEach-Object { Write-Host $_ }
     $lines | Add-Content $log
     if ($out -notmatch "RESULT .*: PASS") { $fail = 1 }
