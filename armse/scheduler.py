@@ -171,6 +171,33 @@ def policy_C_best_square(wl, hw, topn=16):
     return Schedule(*best.key(), label="C_best_square")
 
 
+def policy_D_v2(wl, hw, force=False):
+    """D_v2: deterministic scheduler ranked by the CALIBRATED closed-form estimator (armse/estfit.py). The correction
+    coefficients were fitted on simulator samples of ONE hardware configuration; for any other configuration this falls
+    back to the uncorrected estimator (policy_D) unless force=True (used only to measure transfer). No simulation is
+    used at scheduling time."""
+    import json
+    import os
+    from .estfit import predict
+    if empty_ok(wl):
+        return Schedule(1, 1, 1, label="D_v2")
+    cfg = json.load(open(os.path.join(os.path.dirname(__file__), "est_v2_coef.json")))
+    c = cfg["hw"]
+    if not force and (hw.lanes, hw.bus_bytes, hw.row_lat, hw.a_depth, hw.b_depth, hw.o_words) != (
+            c["lanes"], c["bus"], c["row_lat"], c["a_depth"], c["b_depth"], c["o_words"]):
+        return policy_D(wl, hw)                  # uncalibrated hardware (force=True applies the coefficients anyway)
+    best, bs = None, None
+    for s in candidates(wl, hw):
+        e = estimate(wl, hw, s)
+        key = (predict(e, s.nbuf_in, s.nbuf_out, cfg["coef"]), e["bytes_rd"] + e["bytes_wr"], s.nbuf_in + s.nbuf_out,
+               s.order, s.tm, s.tn, s.tk)
+        if best is None or key < best:
+            best, bs = key, s
+    if bs is None:
+        return _minimal(wl, hw)
+    return Schedule(*bs.key(), label="D_v2")
+
+
 POLICIES = {
     "A_direct": policy_A,
     "B_fixed_single": policy_B,

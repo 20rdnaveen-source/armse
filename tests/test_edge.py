@@ -98,3 +98,36 @@ class TestCompression(unittest.TestCase):
             build_program(replace(wl, weight_bits=3), hw, s)
         self.assertEqual(simulate(build_program(replace(wl, weight_bits=8), hw, s)).metrics, m8)   # default unchanged
  
+ 
+class TestEstimatorV2(unittest.TestCase):
+    def test_v2_policy_legal_correct_and_falls_back(self):
+        from armse.scheduler import policy_D_v2, policy_D
+        hw = HwConfig()
+        wl = Workload("v", 37, 29, 53)
+        s = policy_D_v2(wl, hw)
+        self.assertEqual(violations(wl, hw, s), [])
+        A, B = random_operands(wl, 9)
+        r = simulate(build_program(wl, hw, s), A, B, functional=True)
+        np.testing.assert_array_equal(r.C, reference(A, B))
+        self.assertEqual(policy_D_v2(wl, hw).key(), s.key())                      # deterministic
+        other = hw.replace(row_lat=5)                                              # uncalibrated hardware -> v1 behaviour
+        self.assertEqual(policy_D_v2(wl, other).key(), policy_D(wl, other).key())
+        self.assertEqual(policy_D_v2(Workload("e", 0, 4, 4), hw).label, "D_v2")   # empty workload handled
+ 
+    def test_prediction_is_clamped(self):
+        from armse.estfit import predict, CLAMP
+        e = dict(cycles=1000, t_dma=500, t_cmp=700, iters=10)
+        self.assertEqual(predict(e, 2, 2, [1e9] * 10), CLAMP[1] * 1000)
+        self.assertEqual(predict(e, 2, 2, [-1e9] * 10), CLAMP[0] * 1000)
+ 
+ 
+class TestForcedTransfer(unittest.TestCase):
+    def test_forced_v2_on_other_hardware_is_legal(self):
+        from armse.scheduler import policy_D_v2
+        hw = HwConfig(lanes=16, row_lat=24)
+        wl = Workload("t", 50, 40, 70)
+        s = policy_D_v2(wl, hw, force=True)
+        self.assertEqual(violations(wl, hw, s), [])
+        A, B = random_operands(wl, 3)
+        np.testing.assert_array_equal(simulate(build_program(wl, hw, s), A, B, functional=True).C, reference(A, B))
+ 

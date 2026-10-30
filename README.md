@@ -9,7 +9,7 @@ ARMSE is a working name; **no novelty claim is made** (see `docs/RELATED_WORK.md
 
 | Component | Status |
 |---|---|
-| Python model, scheduler, simulator, estimator, bank/energy analysis | **Executed here**: 46 unit tests pass (`make py-test`) |
+| Python model, scheduler, simulator, estimator, bank/energy analysis | **Executed here**: 72 unit tests pass (`make py-test`) |
 | Functional correctness of tiled execution | 144 (workload x policy) runs bit-exact vs an independent int64 numpy reference, 0 mismatches; plus 150 random cases in tests |
 | Schedule legality | every generated program passes deadlock + buffer-hazard checking; the checker is shown to catch deliberately broken programs |
 | Estimator | traffic/DMA-busy/compute-busy exact (600 random cases); cycles error measured (report section 3) |
@@ -23,7 +23,14 @@ the first time you run them they will either confirm or refute the RTL against t
 ## Layout
 ```
 armse/          config, schedule (program generation), sim, analytic, scheduler, workloads, banks, energy, rtlexport, bench
+tools/          draw_diagrams.py (matplotlib figures)
 tests/          unittest suite (python3 -m unittest discover -s tests -t .)
+armse/netplan.py  JSON network -> plan / report / descriptors (examples/ holds sample networks)
+armse/constrained.py, consstudy.py  deadline / energy-bounded planning with verification + fallback (model only)
+armse/adaptive.py, adaptstudy.py  counter-driven re-planning controller + study (model only)
+armse/hwsweep.py  27-configuration generality sweep (model only)
+armse/depthwise.py, dwstudy.py  channel-parallel depthwise mapping + study (model only)
+armse/estfit.py  estimator calibration study + D_v2 coefficients (model only)
 armse/compressbench.py  INT4-weight candidate study (model only)
 armse/memplan.py, edgestudy.py  tensor-lifetime planner; KV-decode / prefill / depthwise studies (model only)
 armse/fused.py, fusionbench.py  model-only fused GEMM chains (attention / MLP pairs) + study
@@ -38,7 +45,7 @@ docs/           TECHNICAL_REPORT.md, ARCHITECTURE.md, INTERFACE_SPEC.md, EDGE_AI
 
 ## Reproduce
 ```
-make py-test                 # 46 tests
+make py-test                 # 72 tests
 python3 -m armse.bench       # ~100 s, regenerates results/ (deterministic)
 make vectors                 # regenerates rtl/armse_fields.vh and rtl_vectors/
 make rtl-model-test          # cycle-level transcription of the RTL (no HDL tool needed)
@@ -91,6 +98,95 @@ tiny blocks (wideN1: 256 blocks, 3.3x slower at 2 KB). Fusion would need either 
 retention across blocks, or cross-phase overlap (not modelled) to pay off. This is a negative-but-informative result
 under these assumptions, not evidence that fusion cannot help on other hardware.
 
+## Requantisation + ReLU in the writeback path (RTL integrated, NOT yet simulated in Icarus) - `rtl/armse_post.v`, `rtl/armse_dma.v`
+Compulsory for a real device: layers cannot chain without INT32 -> INT8 conversion and ReLU. `armse_post` (streaming, 2-cycle latency) computes
+`out = clamp(((x*M + 2^(s-1)) >> s) + zp, relu ? zp : -128, 127)` (M 16-bit unsigned, s 0..31, zp signed 8-bit), bit-exact with `armse/quant.py`.
+It is now wired into the DMA writeback path as descriptor type 3 (WRITEBACK_REQUANT): the DMA reads INT32 partial sums from the output buffer,
+pushes them through `armse_post`, packs 4 INT8 bytes per beat and writes with **byte strobes** (`x_wstrb`, so a partial last beat never touches neighbouring
+bytes). Parameters come from new `armse_top` ports `cfg_mult/cfg_shift/cfg_zp/cfg_relu` (static during a run, i.e. one layer per program).
+Model: `Workload(out_bytes=1, hw_requant=True, rq=(M,s,zp,relu))`; per-row writeback time `cols + 3*ceil(cols/4) + 1 + max(0, row_lat - n1 - 2)`
+(`sim.wb8_row_cycles`). Network planner: add `"requant": {"mult":..,"shift":..,"zp":..,"relu":true}` to a layer (`examples/digit_mlp_requant.json`);
+`--export` then also writes `requant.cfg` with the port values.
+**Verification status:** Python reference + model (functional, bit-exact), the cycle-level RTL transcription on 13 fixed + 65 random cases (6 fixed and 25
+random requantised: bit-exact INT8 output, exact cycles / bytes / transfers / busy counters), and 72 tests. **The Verilog has NOT been compiled or
+simulated by the author** - run `scripts/run_rtl_tests.ps1` (or `make rtl-test`): it now covers the old cases plus `t08`-`t13` and 25 `trqNN` requant cases and
+the standalone `armse_post` sets (`p00`-`p09`). Throughput note: the simple pack-and-send path serialises one element per cycle through the post unit, so on
+tiny outputs it is ~0.3 % slower than INT32 writeback (digit MLP: 42,789 vs 42,654 cycles) while writing 4x fewer output bytes and removing the host round trip;
+a 4-lane parallel version could gain at most the 2.7 % cycles measured for INT8 outputs and is not worth the area yet.
+
+## External review checks (model only) - `results/EXTERNAL_REVIEW_CHECKS.md`
+An outside review claimed DRAM latency variability would erode the advantage, that missing requantisation matters, and that runtime planning is too slow
+for a microcontroller. Model results (12 workloads, per-burst latency spikes, 20 seeds): D_feedback / best fixed tiling stays 0.859-0.869 for spike
+settings up to 10 % of bursts x 40 cycles (and 200-cycle spikes at 2 %), and only reaches 0.904 at the extreme 20 % x 100 cycles; versus fixed double
+buffering the advantage grows (0.715 -> 0.439); run-to-run variation <= 1 %. INT8 (requantised) outputs: 0.973x cycles, 0.858x bytes (output writes
+are ~24 % of INT32 traffic) - modest, the main value is removing the host round trip. Exhaustive planning evaluates a median 20,682 candidates per
+layer (max 54,006), so plans must be computed offline or cached. The jitter model is simplistic (independent spikes), not a DDR/AXI model.
+
+## Network planner for a real model - `python -m armse.netplan examples/digit_mlp.json`
+Describe your network in a small JSON file (layers: `fc`, `conv2d`, `attention`; see `examples/`). The tool lowers it to GEMMs, plans every layer
+with the scheduler (calibrated estimator when the hardware matches the calibration, otherwise the raw estimator), simulates it on the hardware model you
+give it (`--lanes --row-lat --a-depth --b-depth --o-words`), checks every layer bit-exactly against a reference, compares with fixed double buffering and
+the best fixed tiling, and can write the RTL descriptor programs (`--export DIR`) and a Markdown report (`--report FILE`; `--clock-mhz` converts cycles to an
+ASSUMED latency). Example result for a 784-128-64-10 MLP at batch 1 on the default model: 42,654 cycles, 0.339x fixed double buffering, 0.565x best fixed
+tiling; all three layers are memory-bound (65-90 % stall), dominated by streaming ~100 KB of first-layer weights over a 4 B/cycle bus. **Design insight:**
+for a network this small, keeping the weights on chip (if the device has enough block RAM) removes that traffic entirely and would matter more than
+scheduling; the planner shows when streaming dominates. Not modelled: activations, pooling, softmax, normalisation, depthwise (see `armse/depthwise.py`).
+
+## Resource-bounded operation, mechanism F (model only) - `results/CONSTRAINED_OPERATION.md`
+Planning under a latency deadline or an energy budget (Level-2 analytical energy, illustrative constants - not measured) with a
+known-good fallback. **Trade-off:** per workload, the energy-optimal schedule in a ~90-candidate pool saves 18.9 % energy on average
+(median 23.4 %, max 40.6 %) for 1.053x cycles (max 1.29x); the cycle-optimal schedule (what D_feedback targets) is not the
+energy-optimal one. **Deadline mode** (least energy meeting the deadline; slack = deadline / fastest achievable): trusting the estimator alone
+violated the deadline on 63 % of workloads at slack 1.0, 13 % at 1.05 and 7 % at 1.10, and a safety margin only pushed the controller into
+its (also estimator-picked) fallback. With **estimator proposes, exact model verifies** the choice, violations are **0 % for every feasible
+deadline** (slack >= 1.0), costing 10.1 / 2.6 / 1.1 / 1.0 verification simulations on average at slack 1.0 / 1.05 / 1.10 / >=1.25, and
+saving energy vs the cycle-optimal schedule of 11 % at slack 1.05, 16 % at 1.10 and ~19 % at >= 1.25; an infeasible deadline (0.9) is
+flagged as fallback every time. **Energy-budget mode:** 0 violations (traffic, hence energy, is exact in the model), cycles 1.03-1.05x
+cycle-optimal. Caveats: model only; the 0 % violation guarantee relies on the simulator being exact, which holds in the model (RTL
+transcription agreement on 47 cases) but not for real hardware with contention or variability; energy constants are illustrative;
+no hardware watchdog or deadline enforcement exists in the RTL.
+
+## Counter-driven runtime adaptation, mechanism E (model only) - `results/ADAPTIVE_LOOP.md`
+A controller reads RTL-style counters (dma_busy, cmp_busy, n_xfer, bytes + host-known descriptors) after each layer, infers the true
+burst latency / bus width / banking behaviour, and re-plans later layers with the same raw estimator (no simulation to plan). On an
+8-layer sequence (CNN + MLP + attention GEMMs) with a deliberately wrong planning model, cycles vs static planning / vs an oracle that knows the
+true hardware: no mismatch 1.000 / 1.000 (no re-plan); latency 12 -> 30: 0.954 / 1.081; latency 12 -> 4: 1.003 / 1.000; bus assumed 8 B but
+true 4 B: 1.002 / 0.990; true naive banking: **0.333** / 2.456; latency 30 + naive banking: 0.363 / 2.109. Reading: the inference of the
+hardware parameters is exact (tests), but re-planning pays off only when the model error is LARGE and persistent (banking: 3x faster than static,
+though still 2.1-2.5x slower than the oracle because the first, misplanned layer is already paid for); for mild latency/bus errors the
+raw-estimator schedules are robust and adaptation gains 0-5 % (in two scenarios the static plan even beats the 'oracle' because the
+estimator is imperfect). Caveats: model only; exact timing formulas make the inference exact, real counters would be noisier; the naive-banking
+scenario does not apply to the implemented RTL (skewed banking); one 8-layer sequence; controller runs on the host, no hardware controller exists.
+
+## Hardware-configuration sweep (model only) - `results/HW_SWEEP.md`
+27 configurations (lanes 4/8/16 x buffer capacity 0.5x/1x/2x x burst latency 6/12/24 cycles, bus 4 B) on 12 workloads.
+D_feedback / C_best_square: min 0.536, geomean 0.824, max 0.973 - **never slower than the strongest square-tiling baseline in any of
+the 27 configurations**; D_feedback / C_fixed_double 0.280-0.927 (geomean 0.697). Trends: the advantage grows with more lanes (0.869 ->
+0.842 -> 0.765 geomean for 4/8/16 lanes, i.e. a more memory-bound machine), grows with burst latency (0.882 -> 0.837 -> 0.758 for 6/12/24
+cycles) and shrinks with larger buffers (0.736 -> 0.837 -> 0.908 for 0.5x/1x/2x). The D_v2 coefficients fitted at the default
+configuration, forced onto the other 26 configurations, give 0.827x of C_best_square (raw estimator 0.836x, D_feedback 0.824x), so
+the correction transfers across hardware reasonably well. Caveats: 12 workloads only; the calibration workloads overlap these
+workloads (the transfer test covers a hardware change, not a workload change); bus fixed at 4 B (the RTL value); model only.
+
+## Channel-parallel depthwise mapping (model only) - `results/DEPTHWISE_MAPPING.md`
+The earlier depthwise lowering (one channel at a time, lanes over K = 9 or 25) used only 3.6-8.9 % of the MACs. Spreading the
+lanes over CHANNELS instead (tile = pixels x channels, searched by simulation over tile, order, buffering) is 4.3-8.8x faster
+on four depthwise layers (geomean ~6.7x) and raises MAC utilisation to 26-38 %; it stays memory-bound (60-74 % of cycles are
+stalls) because depthwise has very low arithmetic intensity. Numerics are bit-exact against a numpy depthwise reference over 80
+random tilings in the tests. Caveats: model only (the RTL has no channel-parallel mode and its address generation/banking for this
+layout is not designed or verified); per-channel im2col is counted, no window reuse; the tile search uses the simulator.
+
+## Calibrated estimator D_v2 (model only) - `results/ESTIMATOR_STUDY.md`
+A class-wise linear correction of the closed-form cycle estimate (clamped to 0.85-1.25x of the raw estimate), fitted on
+simulator samples (30 workloads x ~80 schedules). Evaluated leave-one-workload-out: mean regret of the estimator's pick
+falls from 4.18 % to 1.75 % (worst 12.4 % -> 9.9 %). End to end on the 30-workload suite, picking from all legal candidates
+WITHOUT simulating: D_v2 reaches 0.870x of C_best_square cycles (28 wins / 2 losses), versus 0.888x for the uncorrected
+estimator D_adaptive (26 / 4) and 0.869x for D_feedback (29 / 1, which simulates its top-8). So the headline result no longer
+needs a simulator in the scheduling loop. Caveats: a one-time simulator calibration per hardware configuration is required
+(`policy_D_v2` falls back to the uncorrected estimator on any other configuration); one configuration only; samples were drawn
+from the old estimator's top candidates plus random ones; the 0.870 uses held-out coefficients, the shipped coefficient file
+(`armse/est_v2_coef.json`) is fitted on all workloads.
+
 ## Compression candidate (model only) - `results/COMPRESSION_CANDIDATE.md`
 Packed INT4 weights (16-bit scale per column per tile load), same schedule as the INT8 D_feedback: cycles 0.973x geomean
 (0.887x on the memory-bound GEMV / batch-1 MLP subset), external bytes 0.801x, Level-2 energy 0.826x. **Accuracy loss is not
@@ -101,6 +197,8 @@ evaluated**, unpack logic is not costed, and the interaction with re-tuned sched
 `docs/RESEARCH_DECISION.md` (**gather more evidence, leaning revise**: novelty of the core scheduler idea is unestablished),
 `docs/EDGE_AI_ATLAS.md` (scoped bottleneck atlas), `docs/INTERFACE_SPEC.md` (implemented ports/descriptors + proposed register map),
 `docs/LITERATURE_SEARCH_PROMPT.md` (ready-to-paste prompt for a search-enabled session).
+`docs/FINAL_SUMMARY.md` (one-page final-state summary + poster `docs/img/armse_final_state.png`, regenerate with `python tools/draw_final_state.py`), `docs/ARCHITECTURE_DIAGRAM.md` + `docs/img/armse_block_diagram.png`, `docs/img/armse_flow.png` (block diagram and flow; regenerate with `python tools/draw_diagrams.py`; the Mermaid versions have not been render-checked).
+`docs/ARMSE_X_COVERAGE.md` maps the ARMSE-X proposal (mechanisms A-F, compression track, evaluation plan) to what is done, partial, future or not added.
 
 ## Edge workloads, dynamic shapes and memory planning (model only) - `results/EDGE_WORKLOADS.md`
 * **KV-cache decode (cache 32 -> 1024):** a static compile-time schedule is within 0.01 % of per-step runtime planning, because

@@ -1,5 +1,5 @@
 """Closed-form memory-cost estimator (the scheduler's cost function).
- 
+
 Assumptions (all exposed, all validated against the event simulator in tests/ and bench):
   * traffic is exact: the loop-nest reuse rule is expressed through two 'traversal' counts
   * DMA and compute durations are exact sums over tile-size classes
@@ -9,8 +9,8 @@ Assumptions (all exposed, all validated against the event simulator in tests/ an
 from .config import HwConfig, Workload, cdiv
 from .schedule import Schedule
 from .sim import conflict_factor
- 
- 
+
+
 def classes(D: int, t: int):
     f, r = divmod(D, t)
     out = []
@@ -19,8 +19,8 @@ def classes(D: int, t: int):
     if r:
         out.append((r, 1))
     return out
- 
- 
+
+
 def estimate(wl: Workload, hw: HwConfig, sch: Schedule) -> dict:
     M, N, K = wl.M, wl.N, wl.K
     if min(M, N, K) == 0:
@@ -61,5 +61,5 @@ def estimate(wl: Workload, hw: HwConfig, sch: Schedule) -> dict:
     return dict(bytes_rd=tA * M * K + tB * K * N, bytes_wr=ob * M * N,
                 transfers=tA * nm * nk + tB * nk * nn + nm * nn,
                 t_dma=t_dma, t_cmp=t_cmp, cycles=int(cyc),
-                dur_A=durA, dur_B=durB, dur_WB=durW, tA=tA, tB=tB)
- 
+                dur_A=durA, dur_B=durB, dur_WB=durW, tA=tA, tB=tB,
+                first_ld=first_ld, last_wb=last_wb, iters=nm * nn * nk, nm=nm, nn=nn, nk=nk)

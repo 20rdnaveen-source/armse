@@ -31,7 +31,7 @@ Rules that never change:
 
 ### 3.1 VERIFIED (executed in a sandbox with Python 3.12, numpy, pandas, matplotlib)
 - Python model, scheduler, simulator, estimator, bank analysis, energy proxies, fusion model.
-- **46 unit tests pass** (`make py-test`).
+- **72 unit tests pass** (`make py-test`).
 - **Functional correctness:** 144 (workload x policy) runs bit-exact vs an independent int64 numpy reference, 0 mismatches. 150 random cases in tests. 20/20 fused configurations bit-exact (including requantisation).
 - **Legality:** every generated program passes deadlock + buffer-hazard checks; checker proven to catch deliberately broken programs.
 - **Estimator:** traffic, DMA-busy and compute-busy are exact closed forms (600 random cases). Total-cycle error for D's chosen schedules: 5.1 % mean, 14.6 % max. Estimator top-1 equals best of its own top-8 (by simulation) on only 12/30 workloads.
@@ -48,10 +48,19 @@ Rules that never change:
 | Simulator, cost model, tests (36) | DONE (verified) |
 | Benchmarks + capacity/bandwidth/banking/energy/ablation studies | DONE (model only) |
 | Consolidated technical report (docs/TECHNICAL_REPORT.md) | DONE (model-level; numbers traced to result files) |
+| Resource-bounded operation (mechanism F): deadline/energy planning with verification + fallback; energy-optimal saves 18.9 % for 1.053x cycles; 0 % violations when verified vs 63 % estimator-only at tight slack | DONE (model only; no hardware enforcement) |
+| Counter-driven re-planning loop (mechanism E; exact parameter inference; gain only for large persistent model error: banking 0.333x vs static, latency 0.954x; mild errors ~1.0x) | DONE (model only; no hardware controller) |
+| 27-configuration hardware sweep (lanes x capacity x latency, 12 workloads): D_feedback/best-square 0.536-0.973 (geomean 0.824), never slower; advantage grows with lanes and latency, shrinks with capacity | DONE (model only) |
+| Channel-parallel depthwise mapping (verified bit-exact vs numpy; 4.3-8.8x vs K-parallel; model only, no RTL mode) | DONE (model only) |
+| Calibrated estimator D_v2 (held-out evaluated) | DONE (model only; one hardware configuration) |
 | Fusion extension (barrier + overlap) | DONE (model only; mostly negative: overlap 7/20 faster) |
 | Descriptor compression / streaming analysis | DONE (model only) |
 | Edge workloads (KV decode, prefill, depthwise), static-vs-runtime-vs-hybrid scheduling, tensor-lifetime planner | DONE (model only) |
+| Requantisation + ReLU in the writeback path: armse_post + DMA type-3 writeback (byte strobes, cfg ports), model, transcription (31 requant cases exact), planner support, tests | DONE in model/transcription; Verilog NOT yet simulated in Icarus (run scripts/run_rtl_tests.ps1) |
+| Network planner (armse/netplan.py): JSON network -> per-layer plans, bit-exact check, report, RTL descriptors; digit-MLP example 0.339x fixed double-buffering / 0.565x best fixed tiling, all layers memory-bound | DONE (model-level; first real-device step) |
+| Block diagram + flow diagram (PNG, drawn from the RTL modules/ports) and Mermaid versions | DONE (Mermaid rendering not checked) |
 | Bottleneck atlas, candidate matrix, risk register, interface spec, research decision, literature-search prompt (from the 2nd master prompt) | DONE (docs/; decision = gather more evidence, lean revise) |
+| ARMSE-X proposal coverage check (docs/ARMSE_X_COVERAGE.md): B, D done; A, C, E, F partial; compression/sparsity, SCALE-Sim/Timeloop comparison, closed-loop hardware adaptation not added | DONE (analysis) |
 | Literature review with verified citations, novelty check | NOT done (needs a search-enabled session: docs/LITERATURE_SEARCH_PROMPT.md) |
 | INT4 compression candidate | DONE in model (accuracy NOT evaluated) |
 | RTL written | DONE |
@@ -117,6 +126,10 @@ armse/                          project root (GitHub repo)
 │   ├── fused.py        model-only fused GEMM chains (attention, MLP pairs)
 │   ├── bench.py        main benchmark driver -> results/*
 │   ├── fusionbench.py  fusion study -> results/FUSION_REPORT.md
+│   ├── adaptive.py, adaptstudy.py  counter-driven re-planning -> results/ADAPTIVE_LOOP.md
+│   ├── constrained.py, consstudy.py  deadline/energy-bounded planning -> results/CONSTRAINED_OPERATION.md
+│   ├── hwsweep.py  27-configuration sweep -> results/HW_SWEEP.md
+│   ├── depthwise.py, dwstudy.py  channel-parallel depthwise mapping -> results/DEPTHWISE_MAPPING.md
 │   ├── memplan.py, edgestudy.py  tensor-lifetime planner + edge-workload studies -> results/EDGE_WORKLOADS.md
 │   ├── fused_overlap.py, overlapbench.py  overlapped fused chains -> results/FUSION_OVERLAP.md
 │   ├── progstream.py   -> results/PROGRAM_STREAMING.md (model-only descriptor streaming cost)
@@ -259,7 +272,9 @@ Commands: `make py-test` | `make vectors` | `make rtl-model-test` | `make rtl-te
 - *How:* replace unrolled programs with nested-loop descriptors (loop counts + strides + dependency rules) executed by a small address/dependency generator; keep the Python generator as reference; verify program equivalence tile-by-tile.
 - *Acceptance:* identical cycles/bytes/results as unrolled; program_bytes reduced by >= 10x on large workloads.
 
-**P4 - Better scheduler**
+**P4 - Better scheduler (estimator part DONE in model)**
+- *Done:* calibrated estimator D_v2 (results/ESTIMATOR_STUDY.md): mean regret 4.18 % -> 1.75 % (leave-one-workload-out); end-to-end 0.870x of C_best_square (28 wins/2 losses) with no simulation at scheduling time vs 0.888x raw estimator, 0.869x D_feedback. Needs per-hardware-configuration calibration; single configuration only.
+- *Remaining:* bank-conflict and bus terms, dynamic re-planning from REAL RTL counters at tile granularity (a counter-driven layer-granularity loop exists in the model: results/ADAPTIVE_LOOP.md), held-out workloads on other hardware configurations, learned policies only if they beat D_v2.
 - *How:* improve cycle estimator overlap model (reduce 5.1 % mean / 14.6 % max error, raise top-1 hit rate from 12/30); add cost terms for bank conflicts and bus utilisation; add dynamic re-planning from RTL counters (compute_wait, dma_wait, bank_conflicts); only then test learned policies (RL/neural), and only if they beat deterministic D on held-out workloads.
 - *Acceptance:* top-1 pick within X % of best on >= 90 % of workloads; held-out workload evaluation.
 
