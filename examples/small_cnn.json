@@ -1,0 +1,10 @@
+{
+  "name": "small_cnn_example",
+  "batch": 1,
+  "layers": [
+    {"type": "conv2d", "name": "conv1", "H": 28, "W": 28, "cin": 1, "cout": 8, "k": 3, "stride": 1, "pad": 1},
+    {"type": "conv2d", "name": "conv2", "H": 14, "W": 14, "cin": 8, "cout": 16, "k": 3, "stride": 1, "pad": 1},
+    {"type": "fc", "name": "fc1", "in": 784, "out": 64},
+    {"type": "fc", "name": "fc2", "in": 64, "out": 10}
+  ]
+}

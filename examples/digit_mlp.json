@@ -1,0 +1,9 @@
+{
+  "name": "digit_mlp_example",
+  "batch": 1,
+  "layers": [
+    {"type": "fc", "name": "fc1", "in": 784, "out": 128},
+    {"type": "fc", "name": "fc2", "in": 128, "out": 64},
+    {"type": "fc", "name": "fc3", "in": 64, "out": 10}
+  ]
+}
