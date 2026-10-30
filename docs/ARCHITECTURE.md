@@ -2,6 +2,10 @@
 
 Status legend: **[model]** = Python, executed and tested here. **[RTL]** = Verilog written, *not compiled or simulated here*. **[host]** = host-side software.
 
+![ARMSE block diagram](img/armse_block_diagram.png)
+
+More diagrams (Mermaid, rendered on GitHub): `docs/ARCHITECTURE_DIAGRAM.md`. Flow figure: `docs/img/armse_flow.png`.
+
 ## 1. What is hardware, what is software, what is a model
 
 | Part | Kind | File |
@@ -55,6 +59,7 @@ Predicted vs observed behaviour is compared in `results/REPORT.md` section 3.
 |---|---|---|
 | DMA job duration | `job_ovh + rows*(row_lat+1+beats)`, `job_ovh=2`, loads `beats=ceil(cols/4)`, writeback `beats=cols` | IDLE->CMD (1), per row: 1 cmd + `row_lat` wait + beats, DONE (1), counter visible +1 |
 | Compute job duration | `tm*tn*ceil(tk/NB) + 4` | RUN issue cycles, then D1, D2, DONE, counter visible |
+| Requantised writeback job | `2 + rows*(cols + 3*ceil(cols/4) + 1 + max(0, row_lat - n1 - 2))`, `n1 = min(4, cols)` | per beat: n element issues + 2 post-unit cycles + 1 transfer; first beat also waits for the memory latency (`sim.wb8_row_cycles`; checked against the RTL transcription) |
 | First start | cycle 1 after `go` (go = cycle 0) | `start_off = 1` |
 | Total | cycle index at which both counters reach their targets | `cycles` output |
 
