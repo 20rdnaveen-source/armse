@@ -5,8 +5,9 @@
 ## Evidence for
 * A verified, reproducible stack exists (46 unit tests, bit-exact against an independent reference, RTL simulated in Icarus on 7 cases with cycle-exact agreement to the model).
 * On 30 workloads and one configuration, the adaptive scheduler needs 0.733x (D_feedback) / 0.749x (D_adaptive) the cycles of fixed double buffering and 0.869x / 0.888x those of the strongest fixed-shape baseline; the gain comes mainly from tile-shape freedom (ablation 0.749 vs 0.844 without it).
+* The advantage holds across a 27-configuration hardware sweep (lanes, capacity, latency): D_feedback / best square 0.536-0.973, never above 1 (12 workloads, model only).
 * The skewed bank mapping removes an up-to-8x penalty (naive layout) at no cycle cost.
-* Honest negative results were measured: fusion mostly loses at <= 32 KB, descriptor compression is weak (1.37x), depthwise convolution cannot use a lane-parallel-over-K datapath (3.6-8.9 % MAC utilisation).
+* Honest negative results were measured: fusion mostly loses at <= 32 KB, descriptor compression is weak (1.37x), depthwise convolution on a lane-parallel-over-K datapath uses only 3.6-8.9 % of MACs (a channel-parallel mapping reaches 26-38 % in the model; no RTL).
 
 ## Evidence against / unresolved
 * **Novelty is not established and is probably low for the core idea:** cost-model-driven tile/loop/buffer search is, from recall, established (mapping-search tools). No search could be performed.
